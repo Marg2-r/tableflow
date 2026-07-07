@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/srcTableFlow.Api/">
+    <Project Path="srcTableFlow.Api/TableFlow.Api.csproj" />
+  </Folder>
+</Solution>
