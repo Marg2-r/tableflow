@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TableFlow.Api.Models;
 using TableFlow.Api.Data;
+using TableFlow.Api.Enums;
 
 namespace TableFlow.Api.Controllers;
 
@@ -34,7 +35,7 @@ public class TablesController : ControllerBase
         var bookedTableIds = InMemoryStore.Reservations.Where(r =>
             r.ReservationDate == date &&
             r.ReservationTime == time &&
-            r.Status != "Cancelled").Select(r => r.TableId).ToList();
+            r.Status != ReservationStatus.Cancelled).Select(r => r.TableId).ToList();
 
         var availableTables = InMemoryStore.Tables.Where(t =>
                 t.IsActive &&

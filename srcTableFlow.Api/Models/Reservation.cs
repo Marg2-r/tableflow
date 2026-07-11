@@ -1,4 +1,6 @@
-﻿namespace TableFlow.Api.Models;
+﻿using TableFlow.Api.Enums;
+
+namespace TableFlow.Api.Models;
 
 public  class Reservation
 {
@@ -16,7 +18,7 @@ public  class Reservation
 
     public int GuestCount { get; set; }
 
-    public string Status { get; set; } = "Confirmed";
+    public ReservationStatus Status { get; set; } = ReservationStatus.Confirmed;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
