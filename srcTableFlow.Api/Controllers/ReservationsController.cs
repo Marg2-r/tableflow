@@ -11,13 +11,13 @@ public class ReservationsController : ControllerBase
     [HttpGet]
     public ActionResult<List<Reservation>> GetAll()
     {
-        return Ok(IsMemoryStore.Reservations);
+        return Ok(InMemoryStore.Reservations);
     }
 
     [HttpGet("{id:int}")]
     public ActionResult<Reservation> GetById(int id)
     {
-        var reservation = IsMemoryStore.Reservations.FirstOrDefault(r => r.Id == id);
+        var reservation = InMemoryStore.Reservations.FirstOrDefault(r => r.Id == id);
 
         if (reservation is null)
         {
@@ -30,7 +30,7 @@ public class ReservationsController : ControllerBase
     [HttpPost]
     public ActionResult<Reservation> Create(Reservation reservation)
     {
-        var table = IsMemoryStore.Tables.FirstOrDefault(t => t.Id == reservation.TableID);
+        var table = InMemoryStore.Tables.FirstOrDefault(t => t.Id == reservation.TableId);
 
         if (table is null)
         {
@@ -47,8 +47,8 @@ public class ReservationsController : ControllerBase
             return BadRequest("Guest count is greater than table capacity.");
         }
 
-        var alreadyBooked = IsMemoryStore.Reservations.Any(r =>
-            r.TableID == reservation.TableID &&
+        var alreadyBooked = InMemoryStore.Reservations.Any(r =>
+            r.TableId == reservation.TableId &&
             r.ReservationDate == reservation.ReservationDate &&
             r.ReservationTime == reservation.ReservationTime &&
             r.Status != "Cancelled");
@@ -58,15 +58,15 @@ public class ReservationsController : ControllerBase
             return Conflict("This table is already booked for the selected date and time.");
         }
 
-        var nextId = IsMemoryStore.Reservations.Count == 0
+        var nextId = InMemoryStore.Reservations.Count == 0
             ? 1
-            : IsMemoryStore.Reservations.Max(r => r.Id) + 1;
+            : InMemoryStore.Reservations.Max(r => r.Id) + 1;
 
         reservation.Id = nextId;
         reservation.Status = "Confirmed";
         reservation.CreatedAtUtc = DateTime.UtcNow;
 
-        IsMemoryStore.Reservations.Add(reservation);
+        InMemoryStore.Reservations.Add(reservation);
 
         return CreatedAtAction(nameof(GetById), new { id = reservation.Id }, reservation);
     }
@@ -74,7 +74,7 @@ public class ReservationsController : ControllerBase
     [HttpPatch("{id:int}/cancel")]
     public IActionResult Cancel(int id)
     {
-        var reservation = IsMemoryStore.Reservations.FirstOrDefault(r => r.Id == id);
+        var reservation = InMemoryStore.Reservations.FirstOrDefault(r => r.Id == id);
 
         if (reservation is null)
         {

@@ -2,7 +2,7 @@
 
 namespace TableFlow.Api.Data;
 
-public static class IsMemoryStore
+public static class InMemoryStore
 {
     public static List<RestaurantTable> Tables { get; } = new()
     {

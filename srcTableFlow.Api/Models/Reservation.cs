@@ -3,7 +3,7 @@
 public  class Reservation
 {
     public int Id { get; set; }
-    public int TableID { get; set; }
+    public int TableId { get; set; }
 
     public string CustomerName {  get; set; } = string.Empty;
 
