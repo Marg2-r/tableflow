@@ -1,8 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using TableFlow.Api.Data;
-using TableFlow.Api.Models;
+using Microsoft.EntityFrameworkCore;
 using TableFlow.Api.Contracts;
+using TableFlow.Api.Data;
 using TableFlow.Api.Enums;
+using TableFlow.Api.Models;
 
 namespace TableFlow.Api.Controllers;
 
@@ -10,19 +11,37 @@ namespace TableFlow.Api.Controllers;
 [Route("reservations")]
 public class ReservationsController : ControllerBase
 {
-    [HttpGet]
-    public ActionResult<List<Reservation>> GetAll()
+    private readonly TableFlowDbContext _dbContext;
+
+    public ReservationsController(TableFlowDbContext dbContext)
     {
-        var response = InMemoryStore.Reservations
-        .Select(ToResponse)
-        .ToList();
+        _dbContext = dbContext;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<List<ReservationResponse>>> GetAll()
+    {
+        var reservations = await _dbContext.Reservations
+            .AsNoTracking()
+            .Include(reservation => reservation.Table)
+            .OrderBy(reservation => reservation.ReservationDate)
+            .ThenBy(reservation => reservation.ReservationTime)
+            .ToListAsync();
+
+        var response = reservations
+            .Select(ToResponse)
+            .ToList();
+
         return Ok(response);
     }
 
     [HttpGet("{id:int}")]
-    public ActionResult<Reservation> GetById(int id)
+    public async Task<ActionResult<ReservationResponse>> GetById(int id)
     {
-        var reservation = InMemoryStore.Reservations.FirstOrDefault(r => r.Id == id);
+        var reservation = await _dbContext.Reservations
+            .AsNoTracking()
+            .Include(reservation => reservation.Table)
+            .FirstOrDefaultAsync(reservation => reservation.Id == id);
 
         if (reservation is null)
         {
@@ -33,24 +52,10 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpPost]
-    public ActionResult<ReservationResponse> Create(CreateReservationRequest request)
+    public async Task<ActionResult<ReservationResponse>> Create(CreateReservationRequest request)
     {
-        if (request.ReservationDate == default)
-        {
-            return BadRequest("Reservation date is required.");
-        }
-
-        if (request.ReservationTime == default)
-        {
-            return BadRequest("Reservation time is required.");
-        }
-
-        if (request.ReservationDate < DateOnly.FromDateTime(DateTime.Now))
-        {
-            return BadRequest("Reservation date cannot be in the past.");
-        }
-
-        var table = InMemoryStore.Tables.FirstOrDefault(t => t.Id == request.TableId);
+        var table = await _dbContext.Tables
+            .FirstOrDefaultAsync(table => table.Id == request.TableId);
 
         if (table is null)
         {
@@ -59,32 +64,30 @@ public class ReservationsController : ControllerBase
 
         if (!table.IsActive)
         {
-            return BadRequest("Selected table is not available for reservations.");
+            return BadRequest("Selected table is inactive.");
         }
 
         if (request.GuestCount > table.Capacity)
         {
-            return BadRequest("Guest count is greater than table capacity.");
+            return BadRequest(
+                $"Selected table can hold only {table.Capacity} guests.");
         }
 
-        var alreadyBooked = InMemoryStore.Reservations.Any(r =>
-            r.TableId == request.TableId &&
-            r.ReservationDate == request.ReservationDate &&
-            r.ReservationTime == request.ReservationTime &&
-            r.Status != ReservationStatus.Cancelled);
+        var isAlreadyReserved = await _dbContext.Reservations
+            .AnyAsync(reservation =>
+                reservation.TableId == request.TableId &&
+                reservation.ReservationDate == request.ReservationDate &&
+                reservation.ReservationTime == request.ReservationTime &&
+                reservation.Status != ReservationStatus.Cancelled);
 
-        if (alreadyBooked)
+        if (isAlreadyReserved)
         {
-            return Conflict("This table is already booked for the selected date and time.");
+            return Conflict(
+                "Selected table is already reserved for this date and time.");
         }
-
-        var nextId = InMemoryStore.Reservations.Count == 0
-            ? 1
-            : InMemoryStore.Reservations.Max(r => r.Id) + 1;
 
         var reservation = new Reservation
         {
-            Id = nextId,
             TableId = request.TableId,
             CustomerName = request.CustomerName,
             CustomerEmail = request.CustomerEmail,
@@ -93,19 +96,27 @@ public class ReservationsController : ControllerBase
             ReservationTime = request.ReservationTime,
             GuestCount = request.GuestCount,
             Status = ReservationStatus.Confirmed,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            Table = table
         };
 
-        InMemoryStore.Reservations.Add(reservation);
+        _dbContext.Reservations.Add(reservation);
 
-        return CreatedAtAction(nameof(GetById), new { id = reservation.Id }, ToResponse(reservation));
+        await _dbContext.SaveChangesAsync();
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = reservation.Id },
+            ToResponse(reservation));
     }
 
+
     [HttpPatch("{id:int}/cancel")]
-    public ActionResult<ReservationResponse> Cancel(int id)
+    public async Task<ActionResult<ReservationResponse>> Cancel(int id)
     {
-        var reservation = InMemoryStore.Reservations
-            .FirstOrDefault(r => r.Id == id);
+        var reservation = await _dbContext.Reservations
+            .Include(reservation => reservation.Table)
+            .FirstOrDefaultAsync(reservation => reservation.Id == id);
 
         if (reservation is null)
         {
@@ -119,19 +130,18 @@ public class ReservationsController : ControllerBase
 
         reservation.Status = ReservationStatus.Cancelled;
 
+        await _dbContext.SaveChangesAsync();
+
         return Ok(ToResponse(reservation));
     }
 
     private static ReservationResponse ToResponse(Reservation reservation)
     {
-        var table = InMemoryStore.Tables
-            .FirstOrDefault(t => t.Id == reservation.TableId);
-
         return new ReservationResponse
         {
             Id = reservation.Id,
             TableId = reservation.TableId,
-            TableName = table?.Name ?? "Unknown table",
+            TableName = reservation.Table?.Name ?? "Unknown table",
             CustomerName = reservation.CustomerName,
             CustomerEmail = reservation.CustomerEmail,
             CustomerPhone = reservation.CustomerPhone,

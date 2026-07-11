@@ -2,6 +2,8 @@
 using TableFlow.Api.Models;
 using TableFlow.Api.Data;
 using TableFlow.Api.Enums;
+using Microsoft.EntityFrameworkCore;
+using System.Net.WebSockets;
 
 namespace TableFlow.Api.Controllers;
 
@@ -9,19 +11,31 @@ namespace TableFlow.Api.Controllers;
 [Route("tables")]
 public class TablesController : ControllerBase
 {
+    private readonly TableFlowDbContext _dbContext;
+
+    public TablesController(TableFlowDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
 
     [HttpGet]
-    public ActionResult<List<RestaurantTable>> GetAll()
+    public async Task<ActionResult<List<RestaurantTable>>> GetAll()
     {
-        return Ok(InMemoryStore.Tables);
+        var tables = await _dbContext.Tables
+            .AsNoTracking()
+            .OrderBy(t => t.Id)
+            .ToListAsync();
+
+        return Ok(tables);
     }
 
     [HttpGet("{id:int}")]
-    public ActionResult<RestaurantTable> GetById(int id)
+    public async Task<ActionResult<List<RestaurantTable>>> GetById(int id)
     {
-        var table = InMemoryStore.Tables.FirstOrDefault(t => t.Id == id);
+        var table = await _dbContext.Tables
+            .AsNoTracking().FirstOrDefaultAsync(t=>t.Id == id);
 
-        if (table is null)
+        if(table is null)
         {
             return NotFound();
         }
@@ -30,36 +44,47 @@ public class TablesController : ControllerBase
     }
 
     [HttpGet("available")]
-    public ActionResult<RestaurantTable> GetAvailableTables([FromQuery] DateOnly date, [FromQuery] TimeOnly time, [FromQuery] int guests)
+    public async Task<ActionResult<List<RestaurantTable>>> GetAvailable([FromQuery] DateOnly date, [FromQuery] TimeOnly time, [FromQuery] int guests)
     {
-        var bookedTableIds = InMemoryStore.Reservations.Where(r =>
-            r.ReservationDate == date &&
-            r.ReservationTime == time &&
-            r.Status != ReservationStatus.Cancelled).Select(r => r.TableId).ToList();
-
-        var availableTables = InMemoryStore.Tables.Where(t =>
-                t.IsActive &&
-                t.Capacity >= guests &&
-                !bookedTableIds.Contains(t.Id)).ToList();
+        var availableTables = await _dbContext.Tables
+          .AsNoTracking()
+          .Where(table =>
+              table.IsActive &&
+              table.Capacity >= guests &&
+              !_dbContext.Reservations.Any(reservation =>
+                  reservation.TableId == table.Id &&
+                  reservation.ReservationDate == date &&
+                  reservation.ReservationTime == time &&
+                  reservation.Status != ReservationStatus.Cancelled))
+          .OrderBy(table => table.Capacity)
+          .ToListAsync();
 
         return Ok(availableTables);
     }
 
+
     [HttpPost]
-    public ActionResult<RestaurantTable> Create(RestaurantTable table)
+    public async Task<ActionResult<RestaurantTable>> Create(
+        RestaurantTable table)
     {
-        var nextId = InMemoryStore.Tables.Count == 0 ? 1 : InMemoryStore.Tables.Max(t => t.Id) + 1;
+        table.Id = 0;
 
-        table.Id = nextId;
-        InMemoryStore.Tables.Add(table);
+        _dbContext.Tables.Add(table);
 
-        return CreatedAtAction(nameof(GetById), new { id = table.Id }, table);
+        await _dbContext.SaveChangesAsync();
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = table.Id },
+            table);
     }
 
     [HttpPut("{id:int}")]
-    public IActionResult Update(int id, RestaurantTable updatedTable)
+    public async Task<ActionResult<RestaurantTable>> Update(
+        int id,
+        RestaurantTable updatedTable)
     {
-        var table = InMemoryStore.Tables.FirstOrDefault(t => t.Id == id);
+        var table = await _dbContext.Tables.FindAsync(id);
 
         if (table is null)
         {
@@ -73,20 +98,24 @@ public class TablesController : ControllerBase
         table.YPosition = updatedTable.YPosition;
         table.IsActive = updatedTable.IsActive;
 
-        return NoContent();
+        await _dbContext.SaveChangesAsync();
+
+        return Ok(table);
     }
 
     [HttpDelete("{id:int}")]
-    public IActionResult Delete(int id)
+    public async Task<IActionResult> Delete(int id)
     {
-        var table = InMemoryStore.Tables.FirstOrDefault(t => t.Id == id);
+        var table = await _dbContext.Tables.FindAsync(id);
 
         if (table is null)
         {
             return NotFound();
         }
 
-        InMemoryStore.Tables.Remove(table);
+        _dbContext.Tables.Remove(table);
+
+        await _dbContext.SaveChangesAsync();
 
         return NoContent();
     }

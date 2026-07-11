@@ -22,5 +22,6 @@ public  class Reservation
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    public RestaurantTable? Table { get; set; }
 
 }

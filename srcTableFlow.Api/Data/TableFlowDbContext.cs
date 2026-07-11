@@ -16,4 +16,15 @@ public class TableFlowDbContext : DbContext
 
     public DbSet<Reservation> Reservations =>
         Set<Reservation>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Reservation>()
+            .HasOne(reservation => reservation.Table)
+            .WithMany()
+            .HasForeignKey(reservation => reservation.TableId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
 }
