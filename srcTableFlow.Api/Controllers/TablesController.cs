@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TableFlow.Api.Models;
+using TableFlow.Api.Data;
 
 namespace TableFlow.Api.Controllers;
 
@@ -7,40 +8,17 @@ namespace TableFlow.Api.Controllers;
 [Route("tables")]
 public class TablesController : ControllerBase
 {
-    private static readonly List<RestaurantTable> Tables = new()
-    {
-        new RestaurantTable
-        {
-            Id = 1,
-            Name = "T1",
-            Capacity = 2,
-            Zone = "Main Hall",
-            XPosition = 100,
-            YPosition = 150,
-            IsActive = true
-        },
-        new RestaurantTable
-        {
-            Id = 2,
-            Name = "T2",
-            Capacity = 4,
-            Zone = "Main Hall",
-            XPosition = 250,
-            YPosition = 150,
-            IsActive = true
-        }
-    };
 
     [HttpGet]
     public ActionResult<List<RestaurantTable>> GetAll()
     {
-        return Ok(Tables);
+        return Ok(IsMemoryStore.Tables);
     }
 
     [HttpGet("{id:int}")]
     public ActionResult<RestaurantTable> GetById(int id)
     {
-        var table = Tables.FirstOrDefault(t => t.Id == id);
+        var table = IsMemoryStore.Tables.FirstOrDefault(t => t.Id == id);
 
         if (table is null)
         {
@@ -53,10 +31,10 @@ public class TablesController : ControllerBase
     [HttpPost]
     public ActionResult<RestaurantTable> Create(RestaurantTable table)
     {
-        var nextId = Tables.Count == 0 ? 1 : Tables.Max(t => t.Id) + 1;
+        var nextId = IsMemoryStore.Tables.Count == 0 ? 1 : IsMemoryStore.Tables.Max(t => t.Id) + 1;
 
         table.Id = nextId;
-        Tables.Add(table);
+        IsMemoryStore.Tables.Add(table);
 
         return CreatedAtAction(nameof(GetById), new { id = table.Id }, table);
     }
@@ -64,7 +42,7 @@ public class TablesController : ControllerBase
     [HttpPut("{id:int}")]
     public IActionResult Update(int id, RestaurantTable updatedTable)
     {
-        var table = Tables.FirstOrDefault(t => t.Id == id);
+        var table = IsMemoryStore.Tables.FirstOrDefault(t => t.Id == id);
 
         if (table is null)
         {
@@ -84,14 +62,14 @@ public class TablesController : ControllerBase
     [HttpDelete("{id:int}")]
     public IActionResult Delete(int id)
     {
-        var table = Tables.FirstOrDefault(t => t.Id == id);
+        var table = IsMemoryStore.Tables.FirstOrDefault(t => t.Id == id);
 
         if (table is null)
         {
             return NotFound();
         }
 
-        Tables.Remove(table);
+        IsMemoryStore.Tables.Remove(table);
 
         return NoContent();
     }
