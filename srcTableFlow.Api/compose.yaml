@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: tableflow-postgres
+
+    environment:
+      POSTGRES_DB: tableflow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - tableflow-postgres-data:/var/lib/postgresql
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tableflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: tableflow-api
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=tableflow;Username=postgres;Password=${POSTGRES_PASSWORD}
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  tableflow-postgres-data:
