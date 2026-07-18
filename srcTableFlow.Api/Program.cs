@@ -1,12 +1,24 @@
-using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 using TableFlow.Api.Data;
+using TableFlow.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddControllers();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddDbContext<TableFlowDbContext>(options =>
 {
@@ -16,9 +28,14 @@ builder.Services.AddDbContext<TableFlowDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
+builder.Services
+    .AddScoped<ReservationAvailabilityService>();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+app.UseCors("Frontend");
 
 using (var scope = app.Services.CreateScope())
 {

@@ -1,41 +1,58 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using TableFlow.Api.Models;
-using TableFlow.Api.Data;
-using TableFlow.Api.Enums;
 using Microsoft.EntityFrameworkCore;
-using System.Net.WebSockets;
+using TableFlow.Api.Contracts;
+using TableFlow.Api.Data;
+using TableFlow.Api.Models;
+using TableFlow.Api.Services;
 
 namespace TableFlow.Api.Controllers;
 
 [ApiController]
-[Route("tables")]
+[Route("restaurants/{restaurantId:int}/tables")]
 public class TablesController : ControllerBase
 {
     private readonly TableFlowDbContext _dbContext;
+    private readonly ReservationAvailabilityService
+        _availabilityService;
 
-    public TablesController(TableFlowDbContext dbContext)
+    public TablesController(
+        TableFlowDbContext dbContext,
+        ReservationAvailabilityService availabilityService)
     {
         _dbContext = dbContext;
+        _availabilityService = availabilityService;
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<RestaurantTable>>> GetAll()
+    public async Task<ActionResult<List<RestaurantTable>>> GetAll(
+        int restaurantId,
+        CancellationToken cancellationToken)
     {
         var tables = await _dbContext.Tables
             .AsNoTracking()
-            .OrderBy(t => t.Id)
-            .ToListAsync();
+            .Where(table =>
+                table.RestaurantId == restaurantId)
+            .OrderBy(table => table.Id)
+            .ToListAsync(cancellationToken);
 
         return Ok(tables);
     }
 
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<List<RestaurantTable>>> GetById(int id)
+    public async Task<ActionResult<RestaurantTable>> GetById(
+        int restaurantId,
+        int id,
+        CancellationToken cancellationToken)
     {
         var table = await _dbContext.Tables
-            .AsNoTracking().FirstOrDefaultAsync(t=>t.Id == id);
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                table =>
+                    table.Id == id &&
+                    table.RestaurantId == restaurantId,
+                cancellationToken);
 
-        if(table is null)
+        if (table is null)
         {
             return NotFound();
         }
@@ -44,47 +61,121 @@ public class TablesController : ControllerBase
     }
 
     [HttpGet("available")]
-    public async Task<ActionResult<List<RestaurantTable>>> GetAvailable([FromQuery] DateOnly date, [FromQuery] TimeOnly time, [FromQuery] int guests)
+    public async Task<ActionResult<List<RestaurantTable>>>
+        GetAvailable(
+            int restaurantId,
+            [FromQuery] DateOnly date,
+            [FromQuery] TimeOnly time,
+            [FromQuery] int guests,
+            CancellationToken cancellationToken)
     {
-        var availableTables = await _dbContext.Tables
-          .AsNoTracking()
-          .Where(table =>
-              table.IsActive &&
-              table.Capacity >= guests &&
-              !_dbContext.Reservations.Any(reservation =>
-                  reservation.TableId == table.Id &&
-                  reservation.ReservationDate == date &&
-                  reservation.ReservationTime == time &&
-                  reservation.Status != ReservationStatus.Cancelled))
-          .OrderBy(table => table.Capacity)
-          .ToListAsync();
+        try
+        {
+            var tables =
+                await _availabilityService
+                    .GetAvailableTablesAsync(
+                        restaurantId,
+                        date,
+                        time,
+                        guests,
+                        cancellationToken);
 
-        return Ok(availableTables);
+            return Ok(tables);
+        }
+        catch (ReservationValidationException exception)
+        {
+            return BadRequest(exception.Message);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(exception.Message);
+        }
     }
 
+    [HttpGet("{tableId:int}/available-times")]
+    public async Task<ActionResult<AvailableTimesResponse>>
+        GetAvailableTimes(
+            int restaurantId,
+            int tableId,
+            [FromQuery] DateOnly date,
+            [FromQuery] int guests,
+            CancellationToken cancellationToken)
+    {
+        try
+        {
+            var availableTimes =
+                await _availabilityService
+                    .GetAvailableTimesAsync(
+                        restaurantId,
+                        tableId,
+                        date,
+                        guests,
+                        cancellationToken);
+
+            return Ok(new AvailableTimesResponse
+            {
+                TableId = tableId,
+                Date = date,
+                AvailableTimes = availableTimes
+            });
+        }
+        catch (ReservationValidationException exception)
+        {
+            return BadRequest(exception.Message);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(exception.Message);
+        }
+    }
 
     [HttpPost]
     public async Task<ActionResult<RestaurantTable>> Create(
-        RestaurantTable table)
+        int restaurantId,
+        RestaurantTable table,
+        CancellationToken cancellationToken)
     {
+        var restaurantExists =
+            await _dbContext.Restaurants.AnyAsync(
+                restaurant =>
+                    restaurant.Id == restaurantId,
+                cancellationToken);
+
+        if (!restaurantExists)
+        {
+            return NotFound("Restaurant does not exist.");
+        }
+
         table.Id = 0;
+        table.RestaurantId = restaurantId;
 
         _dbContext.Tables.Add(table);
 
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return CreatedAtAction(
             nameof(GetById),
-            new { id = table.Id },
+            new
+            {
+                restaurantId,
+                id = table.Id
+            },
             table);
     }
 
     [HttpPut("{id:int}")]
     public async Task<ActionResult<RestaurantTable>> Update(
+        int restaurantId,
         int id,
-        RestaurantTable updatedTable)
+        RestaurantTable updatedTable,
+        CancellationToken cancellationToken)
     {
-        var table = await _dbContext.Tables.FindAsync(id);
+        var table = await _dbContext.Tables
+            .FirstOrDefaultAsync(
+                table =>
+                    table.Id == id &&
+                    table.RestaurantId == restaurantId,
+                cancellationToken);
 
         if (table is null)
         {
@@ -98,24 +189,34 @@ public class TablesController : ControllerBase
         table.YPosition = updatedTable.YPosition;
         table.IsActive = updatedTable.IsActive;
 
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(table);
     }
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Deactivate(
+        int restaurantId,
+        int id,
+        CancellationToken cancellationToken)
     {
-        var table = await _dbContext.Tables.FindAsync(id);
+        var table = await _dbContext.Tables
+            .FirstOrDefaultAsync(
+                table =>
+                    table.Id == id &&
+                    table.RestaurantId == restaurantId,
+                cancellationToken);
 
         if (table is null)
         {
             return NotFound();
         }
 
-        _dbContext.Tables.Remove(table);
+        // Не удаляем физически, чтобы не потерять
+        // историю связанных резерваций.
+        table.IsActive = false;
 
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return NoContent();
     }
