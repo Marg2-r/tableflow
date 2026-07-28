@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import "./App.css";
+import { API_URL, RESTAURANT_ID } from "./config";
+import ManagementSettings from "./components/ManagementSettings";
 
-const API_URL = "http://localhost:8080";
 const OPENING_TIME_MINUTES = 12 * 60;
 const CLOSING_TIME_MINUTES = 23 * 60;
 const TIME_STEP_MINUTES = 15;
@@ -40,6 +41,8 @@ for (
 
 function App() {
   const today = formatLocalDate(new Date());
+
+  const [activePage, setActivePage] = useState("booking");
 
   const [date, setDate] = useState(today);
   const [time, setTime] = useState("");
@@ -96,11 +99,15 @@ function App() {
       });
 
       const response = await fetch(
-        `${API_URL}/tables/available?${query.toString()}`,
+        `${API_URL}/restaurants/${RESTAURANT_ID}/tables/available?${query.toString()}`,
       );
-
+      
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        const message = await response.text();
+
+        throw new Error(
+          message || `Request failed with status ${response.status}`,
+        );
       }
 
       const data = await response.json();
@@ -109,16 +116,42 @@ function App() {
       setHasSearched(true);
     } catch (requestError) {
       console.error(requestError);
-      setError(
-        "Could not load available tables. Make sure the backend is running.",
-      );
+      setError(requestError.message);
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <main className="page">
+<>
+    <nav className="app-navigation">
+      <div className="navigation-content">
+        <strong className="app-logo">TableFlow</strong>
+
+        <div className="navigation-buttons">
+          <button
+            type="button"
+            className={activePage === "booking" ? "active" : ""}
+            onClick={() => setActivePage("booking")}
+          >
+            Booking
+          </button>
+
+          <button
+            type="button"
+            className={activePage === "management" ? "active" : ""}
+            onClick={() => setActivePage("management")}
+          >
+            Management
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    {activePage === "management" ? (
+      <ManagementSettings />
+    ) : (
+<main className="page">
       <section className="hero">
         <p className="eyebrow">Restaurant reservation platform</p>
         <h1>Book your table</h1>
@@ -220,7 +253,9 @@ function App() {
         </section>
       )}
     </main>
-  );
+    )}
+  </>
+);
 }
 
 export default App;

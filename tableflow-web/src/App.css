@@ -243,3 +243,167 @@ h2 {
     flex-direction: column;
   }
 }
+
+.app-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid #dedbd4;
+  background: rgba(245, 243, 239, 0.94);
+  backdrop-filter: blur(14px);
+}
+
+.navigation-content {
+  width: min(1100px, calc(100% - 32px));
+  min-height: 70px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.app-logo {
+  font-size: 22px;
+}
+
+.navigation-buttons {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 14px;
+  background: #e9e6df;
+}
+
+.navigation-buttons button {
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #67635c;
+  font-weight: 700;
+}
+
+.navigation-buttons button.active {
+  background: #ffffff;
+  color: #24231f;
+  box-shadow: 0 3px 10px rgba(40, 35, 25, 0.1);
+}
+
+.management-hero h1 {
+  font-size: clamp(38px, 6vw, 60px);
+}
+
+.management-card {
+  padding: 28px;
+  border: 1px solid #dedbd4;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 20px 50px rgba(40, 35, 25, 0.08);
+}
+
+.management-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.management-form label {
+  display: grid;
+  gap: 8px;
+  color: #36332f;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.management-form label span {
+  min-height: 38px;
+  color: #7a756e;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #d7d3cb;
+  border-radius: 12px;
+  background: #faf9f7;
+}
+
+.input-with-unit:focus-within {
+  border-color: #292722;
+  background: #ffffff;
+}
+
+.input-with-unit input {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+.input-with-unit strong {
+  padding: 0 14px;
+  color: #817c74;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.management-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+.management-actions button {
+  min-height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 12px;
+  background: #24231f;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.management-actions .secondary-button {
+  border: 1px solid #d7d3cb;
+  background: #ffffff;
+  color: #36332f;
+}
+
+.management-actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.success-message {
+  margin: 20px 0 0;
+  color: #26734d;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .management-form {
+    grid-template-columns: 1fr;
+  }
+
+  .management-actions {
+    flex-direction: column-reverse;
+  }
+
+  .management-actions button {
+    width: 100%;
+  }
+
+  .navigation-content {
+    min-height: 64px;
+  }
+}
