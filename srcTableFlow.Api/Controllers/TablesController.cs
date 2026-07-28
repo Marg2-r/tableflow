@@ -92,6 +92,52 @@ public class TablesController : ControllerBase
         }
     }
 
+    [HttpGet("available-times")]
+    public async Task<ActionResult<AvailableTimesOverviewResponse>>
+    GetAvailableTimesOverview(
+        int restaurantId,
+        [FromQuery] DateOnly date,
+        [FromQuery] int guests,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var availableTimes =
+                await _availabilityService
+                    .GetAvailableTimesOverviewAsync(
+                        restaurantId,
+                        date,
+                        guests,
+                        cancellationToken);
+
+            var response = new AvailableTimesOverviewResponse
+            {
+                Date = date,
+                Guests = guests,
+                AvailableTimes = availableTimes
+                    .Select(option =>
+                        new AvailableTimeSlotResponse
+                        {
+                            Time = option.Time,
+                            AvailableTableCount =
+                                option.AvailableTableCount
+                        })
+                    .ToList()
+            };
+
+            return Ok(response);
+        }
+        catch (ReservationValidationException exception)
+        {
+            return BadRequest(exception.Message);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return NotFound(exception.Message);
+        }
+    }
+
+
     [HttpGet("{tableId:int}/available-times")]
     public async Task<ActionResult<AvailableTimesResponse>>
         GetAvailableTimes(

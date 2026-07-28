@@ -469,6 +469,141 @@ public sealed class ReservationAvailabilityService
         }
     }
 
+    public async Task<List<AvailableTimeOption>>
+    GetAvailableTimesOverviewAsync(
+        int restaurantId,
+        DateOnly date,
+        int guests,
+        CancellationToken cancellationToken = default)
+    {
+        if (guests < 1)
+        {
+            throw new ReservationValidationException(
+                "Guest count must be at least 1.");
+        }
+
+        var context = await GetDayContextAsync(
+            restaurantId,
+            date,
+            cancellationToken);
+
+        var tableIds = await _dbContext.Tables
+            .AsNoTracking()
+            .Where(table =>
+                table.RestaurantId == restaurantId &&
+                table.IsActive &&
+                table.Capacity >= guests)
+            .Select(table => table.Id)
+            .ToListAsync(cancellationToken);
+
+        if (tableIds.Count == 0)
+        {
+            return [];
+        }
+
+        var serviceStartsAtUtc = ConvertLocalToUtc(
+            context.OpeningLocal,
+            context.TimeZone);
+
+        var serviceEndsAtUtc = ConvertLocalToUtc(
+            context.ClosingLocal,
+            context.TimeZone);
+
+        var reservations = await _dbContext.Reservations
+            .AsNoTracking()
+            .Where(reservation =>
+                tableIds.Contains(reservation.TableId) &&
+                BlockingStatuses.Contains(reservation.Status) &&
+                reservation.StartsAtUtc < serviceEndsAtUtc &&
+                reservation.TableAvailableAtUtc >
+                    serviceStartsAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var tableBlocks = await _dbContext.TableBlocks
+            .AsNoTracking()
+            .Where(tableBlock =>
+                tableIds.Contains(tableBlock.TableId) &&
+                tableBlock.CancelledAtUtc == null &&
+                tableBlock.StartsAtUtc < serviceEndsAtUtc &&
+                tableBlock.EndsAtUtc > serviceStartsAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var reservationsByTable = reservations
+            .GroupBy(reservation => reservation.TableId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToList());
+
+        var blocksByTable = tableBlocks
+            .GroupBy(tableBlock => tableBlock.TableId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToList());
+
+        var availableTimes = new List<AvailableTimeOption>();
+        var localStart = context.OpeningLocal;
+        var utcNow = DateTime.UtcNow;
+
+        while (localStart < context.ClosingLocal)
+        {
+            var validationError = ValidateLocalStart(
+                context,
+                localStart,
+                utcNow);
+
+            if (validationError is null)
+            {
+                var window = BuildWindow(
+                    context,
+                    localStart);
+
+                var availableTableCount = 0;
+
+                foreach (var tableId in tableIds)
+                {
+                    var hasReservationConflict =
+                        reservationsByTable.TryGetValue(
+                            tableId,
+                            out var tableReservations) &&
+                        tableReservations.Any(reservation =>
+                            reservation.StartsAtUtc <
+                                window.TableAvailableAtUtc &&
+                            reservation.TableAvailableAtUtc >
+                                window.StartsAtUtc);
+
+                    var hasBlockConflict =
+                        blocksByTable.TryGetValue(
+                            tableId,
+                            out var tableBlockList) &&
+                        tableBlockList.Any(tableBlock =>
+                            tableBlock.StartsAtUtc <
+                                window.TableAvailableAtUtc &&
+                            tableBlock.EndsAtUtc >
+                                window.StartsAtUtc);
+
+                    if (!hasReservationConflict &&
+                        !hasBlockConflict)
+                    {
+                        availableTableCount++;
+                    }
+                }
+
+                if (availableTableCount > 0)
+                {
+                    availableTimes.Add(
+                        new AvailableTimeOption(
+                            TimeOnly.FromDateTime(localStart),
+                            availableTableCount));
+                }
+            }
+
+            localStart = localStart.AddMinutes(
+                context.Settings.SlotIntervalMinutes);
+        }
+
+        return availableTimes;
+    }
+
     private sealed record ReservationDayContext(
         Restaurant Restaurant,
         RestaurantSettings Settings,
@@ -477,3 +612,4 @@ public sealed class ReservationAvailabilityService
         DateTime OpeningLocal,
         DateTime ClosingLocal);
 }
+

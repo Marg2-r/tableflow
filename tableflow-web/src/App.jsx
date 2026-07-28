@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./App.css";
-import { API_URL, RESTAURANT_ID } from "./config";
-import ManagementSettings from "./components/ManagementSettings";
 
-const OPENING_TIME_MINUTES = 12 * 60;
-const CLOSING_TIME_MINUTES = 23 * 60;
-const TIME_STEP_MINUTES = 15;
+import GeneralTimePicker from "./components/GeneralTimePicker";
+import ManagementSettings from "./components/ManagementSettings";
+import ReservationForm from "./components/ReservationForm";
+import TableTimePicker from "./components/TableTimePicker";
+import { API_URL, RESTAURANT_ID } from "./config";
 
 function formatLocalDate(date) {
   const year = date.getFullYear();
@@ -15,29 +15,29 @@ function formatLocalDate(date) {
   return `${year}-${month}-${day}`;
 }
 
-function formatTime(minutes) {
-  const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
-  const remainingMinutes = String(minutes % 60).padStart(2, "0");
-
-  return `${hours}:${remainingMinutes}`;
+function normalizeTime(time) {
+  return time.slice(0, 5);
 }
 
-function timeToMinutes(time) {
-  const [hours, minutes] = time.split(":").map(Number);
+async function readError(response) {
+  const text = await response.text();
 
-  return hours * 60 + minutes;
+  if (!text) {
+    return `Request failed with status ${response.status}`;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+
+    return parsed.title || parsed.message || text;
+  } catch {
+    return text;
+  }
 }
-
-const ALL_TIME_SLOTS = [];
-
-for (
-  let minutes = OPENING_TIME_MINUTES;
-  minutes < CLOSING_TIME_MINUTES;
-  minutes += TIME_STEP_MINUTES
-) {
-  ALL_TIME_SLOTS.push(formatTime(minutes));
-}
-
 
 function App() {
   const today = formatLocalDate(new Date());
@@ -45,217 +45,322 @@ function App() {
   const [activePage, setActivePage] = useState("booking");
 
   const [date, setDate] = useState(today);
-  const [time, setTime] = useState("");
   const [guests, setGuests] = useState(2);
 
+  const [generalTimes, setGeneralTimes] = useState([]);
+  const [searchTime, setSearchTime] = useState("");
+
   const [tables, setTables] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [selectedTableTime, setSelectedTableTime] = useState("");
+
+  const [isOverviewLoading, setIsOverviewLoading] = useState(false);
+  const [isTablesLoading, setIsTablesLoading] = useState(false);
+
+  const [isReservationFormOpen, setIsReservationFormOpen] =
+    useState(false);
+
   const [error, setError] = useState("");
-  const [hasSearched, setHasSearched] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
-  const availableTimeSlots = useMemo(() => {
-  if (date !== today) {
-    return ALL_TIME_SLOTS;
-  }
+  const loadAvailableTables = useCallback(
+    async (time) => {
+      if (!time) {
+        setTables([]);
+        return;
+      }
 
-  const now = new Date();
-  const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+      setIsTablesLoading(true);
+      setError("");
 
-  return ALL_TIME_SLOTS.filter(
-    (slot) => timeToMinutes(slot) > currentTimeMinutes,
+      try {
+        const query = new URLSearchParams({
+          date,
+          time: `${time}:00`,
+          guests: guests.toString(),
+        });
+
+        const response = await fetch(
+          `${API_URL}/restaurants/${RESTAURANT_ID}/tables/available?${query}`,
+        );
+
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+
+        const data = await response.json();
+
+        setTables(data);
+      } catch (requestError) {
+        console.error(requestError);
+        setTables([]);
+        setError(requestError.message);
+      } finally {
+        setIsTablesLoading(false);
+      }
+    },
+    [date, guests],
   );
-}, [date, today]);
 
-  async function handleSearch(event) {
-    event.preventDefault();
-
+  const loadGeneralAvailability = useCallback(async () => {
+    setIsOverviewLoading(true);
     setError("");
-    setTables([]);
-    setHasSearched(false);
+    setSuccessMessage("");
 
-    if (!date || !time || guests < 1) {
-      setError("Please select a date, time and number of guests.");
-      return;
-    }
-
-    if (date < today) {
-      setError("You cannot select a past date.");
-      return;
-    }
-
-    if (!time) {
-      setError("Please select an available time.");
-      return;
-    }
-    setIsLoading(true);
+    setSelectedTable(null);
+    setSelectedTableTime("");
 
     try {
-      const reservationTime = `${time}:00`;
-
       const query = new URLSearchParams({
         date,
-        time: reservationTime,
         guests: guests.toString(),
       });
 
       const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/tables/available?${query.toString()}`,
+        `${API_URL}/restaurants/${RESTAURANT_ID}/tables/available-times?${query}`,
       );
-      
-      if (!response.ok) {
-        const message = await response.text();
 
-        throw new Error(
-          message || `Request failed with status ${response.status}`,
-        );
+      if (!response.ok) {
+        throw new Error(await readError(response));
       }
 
       const data = await response.json();
 
-      setTables(data);
-      setHasSearched(true);
+      const normalizedTimes = data.availableTimes.map((option) => ({
+        time: normalizeTime(option.time),
+        availableTableCount: option.availableTableCount,
+      }));
+
+      setGeneralTimes(normalizedTimes);
+
+      if (normalizedTimes.length === 0) {
+        setSearchTime("");
+        setTables([]);
+        return;
+      }
+
+      // Первый элемент backend уже возвращает как ближайший
+      // доступный временной слот.
+      const nearestTime = normalizedTimes[0].time;
+
+      setSearchTime(nearestTime);
+      await loadAvailableTables(nearestTime);
     } catch (requestError) {
       console.error(requestError);
+
+      setGeneralTimes([]);
+      setSearchTime("");
+      setTables([]);
       setError(requestError.message);
     } finally {
-      setIsLoading(false);
+      setIsOverviewLoading(false);
     }
+  }, [date, guests, loadAvailableTables]);
+
+  useEffect(() => {
+    if (activePage === "booking") {
+      loadGeneralAvailability();
+    }
+  }, [activePage, loadGeneralAvailability]);
+
+  async function handleGeneralTimeSelect(time) {
+    setSearchTime(time);
+    setSelectedTable(null);
+    setSelectedTableTime("");
+    setSuccessMessage("");
+
+    await loadAvailableTables(time);
+  }
+
+  function handleTableSelect(table) {
+    setSelectedTable(table);
+
+    // Стол уже был найден свободным на searchTime,
+    // поэтому это время можно выделить сразу.
+    setSelectedTableTime(searchTime);
+    setSuccessMessage("");
+  }
+
+  function handleBackToAllTables() {
+    setSelectedTable(null);
+    setSelectedTableTime("");
+    setIsReservationFormOpen(false);
+  }
+
+  async function handleReservationCreated(reservation) {
+    setIsReservationFormOpen(false);
+    setSelectedTable(null);
+    setSelectedTableTime("");
+
+    setSuccessMessage(
+      `Reservation #${reservation.id} was created successfully.`,
+    );
+
+    // Перезагружаем времена и карту, потому что доступность изменилась.
+    await loadGeneralAvailability();
   }
 
   return (
-<>
-    <nav className="app-navigation">
-      <div className="navigation-content">
-        <strong className="app-logo">TableFlow</strong>
+    <>
+      <nav className="app-navigation">
+        <div className="navigation-content">
+          <strong className="app-logo">TableFlow</strong>
 
-        <div className="navigation-buttons">
-          <button
-            type="button"
-            className={activePage === "booking" ? "active" : ""}
-            onClick={() => setActivePage("booking")}
-          >
-            Booking
-          </button>
+          <div className="navigation-buttons">
+            <button
+              type="button"
+              className={activePage === "booking" ? "active" : ""}
+              onClick={() => setActivePage("booking")}
+            >
+              Booking
+            </button>
 
-          <button
-            type="button"
-            className={activePage === "management" ? "active" : ""}
-            onClick={() => setActivePage("management")}
-          >
-            Management
-          </button>
-        </div>
-      </div>
-    </nav>
-
-    {activePage === "management" ? (
-      <ManagementSettings />
-    ) : (
-<main className="page">
-      <section className="hero">
-        <p className="eyebrow">Restaurant reservation platform</p>
-        <h1>Book your table</h1>
-        <p className="hero-description">
-          Choose a date, time and party size to see available tables.
-        </p>
-      </section>
-
-      <section className="search-card">
-        <form className="search-form" onSubmit={handleSearch}>
-          <label>
-            Date
-            <input
-              type="date"
-              min={today}
-              value={date}
-              onChange={(event) => {
-                setDate(event.target.value);
-                setTime("");
-              }}
-              required
-            />
-          </label>
-
-          <select
-            value={time}
-            onChange={(event) => setTime(event.target.value)}
-            disabled={availableTimeSlots.length === 0}
-            required
-          >
-            <option value="">
-              {availableTimeSlots.length === 0
-                ? "No more times today"
-                : "Select time"}
-            </option>
-
-            {availableTimeSlots.map((slot) => (
-              <option key={slot} value={slot}>
-                {slot}
-              </option>
-            ))}
-          </select>
-
-          <label>
-            Guests
-            <input
-              type="number"
-              min="1"
-              max="20"
-              value={guests}
-              onChange={(event) => setGuests(Number(event.target.value))}
-            />
-          </label>
-
-          <button type="submit" disabled={isLoading}>
-            {isLoading ? "Searching..." : "Find available tables"}
-          </button>
-        </form>
-
-        {error && <p className="error-message">{error}</p>}
-      </section>
-
-      {hasSearched && (
-        <section className="results">
-          <div className="results-header">
-            <div>
-              <p className="eyebrow">Availability</p>
-              <h2>Available tables</h2>
-            </div>
-
-            <span className="result-count">
-              {tables.length} {tables.length === 1 ? "table" : "tables"}
-            </span>
+            <button
+              type="button"
+              className={activePage === "management" ? "active" : ""}
+              onClick={() => setActivePage("management")}
+            >
+              Management
+            </button>
           </div>
+        </div>
+      </nav>
 
-          {tables.length === 0 ? (
-            <div className="empty-state">
-              No tables are available for the selected time.
+      {activePage === "management" ? (
+        <ManagementSettings />
+      ) : (
+        <main className="page">
+          <section className="hero">
+            <p className="eyebrow">Restaurant reservation platform</p>
+            <h1>Book your table</h1>
+
+            <p className="hero-description">
+              Choose a date, party size and one of the available times.
+            </p>
+          </section>
+
+          <section className="search-card">
+            <div className="booking-controls">
+              <label>
+                Date
+
+                <input
+                  type="date"
+                  min={today}
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                />
+              </label>
+
+              <label>
+                Guests
+
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={guests}
+                  onChange={(event) =>
+                    setGuests(Number(event.target.value))
+                  }
+                />
+              </label>
             </div>
-          ) : (
-            <div className="restaurant-map">
-              {tables.map((table) => (
-                <button
-                  className="table-item"
-                  key={table.id}
-                  style={{
-                    left: `${table.xPosition}px`,
-                    top: `${table.yPosition}px`,
-                  }}
-                  type="button"
-                >
-                  <strong>{table.name}</strong>
-                  <span>{table.capacity} guests</span>
-                  <small>{table.zone}</small>
-                </button>
-              ))}
+
+            {selectedTable ? (
+              <TableTimePicker
+                table={selectedTable}
+                date={date}
+                guests={guests}
+                selectedTime={selectedTableTime}
+                onSelectTime={setSelectedTableTime}
+                onBack={handleBackToAllTables}
+                onReserve={() => setIsReservationFormOpen(true)}
+              />
+            ) : (
+              <GeneralTimePicker
+                options={generalTimes}
+                selectedTime={searchTime}
+                isLoading={isOverviewLoading}
+                onSelectTime={handleGeneralTimeSelect}
+              />
+            )}
+
+            {error && <p className="error-message">{error}</p>}
+
+            {successMessage && (
+              <p className="success-message">{successMessage}</p>
+            )}
+          </section>
+
+          <section className="results">
+            <div className="results-header">
+              <div>
+                <p className="eyebrow">Availability</p>
+
+                <h2>
+                  {searchTime
+                    ? `Available tables at ${searchTime}`
+                    : "Available tables"}
+                </h2>
+              </div>
+
+              <span className="result-count">
+                {tables.length}{" "}
+                {tables.length === 1 ? "table" : "tables"}
+              </span>
             </div>
-          )}
-        </section>
+
+            {isTablesLoading ? (
+              <div className="empty-state">
+                Loading available tables...
+              </div>
+            ) : tables.length === 0 ? (
+              <div className="empty-state">
+                No tables are available for the selected time.
+              </div>
+            ) : (
+              <div className="restaurant-map">
+                {tables.map((table) => (
+                  <button
+                    key={table.id}
+                    type="button"
+                    className={
+                      selectedTable?.id === table.id
+                        ? "table-item selected"
+                        : "table-item"
+                    }
+                    style={{
+                      left: `${table.xPosition}px`,
+                      top: `${table.yPosition}px`,
+                    }}
+                    onClick={() => handleTableSelect(table)}
+                  >
+                    <strong>{table.name}</strong>
+                    <span>{table.capacity} guests</span>
+                    <small>{table.zone}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {isReservationFormOpen &&
+            selectedTable &&
+            selectedTableTime && (
+              <ReservationForm
+                table={selectedTable}
+                date={date}
+                time={selectedTableTime}
+                guests={guests}
+                onClose={() => setIsReservationFormOpen(false)}
+                onReserved={handleReservationCreated}
+              />
+            )}
+        </main>
       )}
-    </main>
-    )}
-  </>
-);
+    </>
+  );
 }
 
 export default App;
