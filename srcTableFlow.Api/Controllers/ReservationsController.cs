@@ -100,6 +100,14 @@ public class ReservationsController : ControllerBase
                 $"{table.Capacity} guests.");
         }
 
+        await using var transaction =
+            await _dbContext.Database.BeginTransactionAsync(
+                cancellationToken);
+
+        await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({request.TableId});",
+            cancellationToken);  // запускает раные потоки для айди 1 и 2 но если 2 одинаковыах то реквест а ждет реквест б 
+
         ReservationWindow window;
 
         try
@@ -128,7 +136,7 @@ public class ReservationsController : ControllerBase
         if (!isAvailable)
         {
             return Conflict(
-                "Selected table is not available for this time.");
+                "The table is no longer available for the selected time.");
         }
 
         var utcNow = DateTime.UtcNow;
@@ -137,16 +145,15 @@ public class ReservationsController : ControllerBase
         {
             RestaurantId = restaurantId,
             TableId = request.TableId,
-            CustomerName = request.CustomerName,
-            CustomerEmail = request.CustomerEmail,
-            CustomerPhone = request.CustomerPhone,
+            CustomerName = request.CustomerName.Trim(),
+            CustomerEmail = request.CustomerEmail.Trim(),
+            CustomerPhone = request.CustomerPhone.Trim(),
             GuestCount = request.GuestCount,
             StartsAtUtc = window.StartsAtUtc,
             EndsAtUtc = window.EndsAtUtc,
-            TableAvailableAtUtc =
-                window.TableAvailableAtUtc,
+            TableAvailableAtUtc = window.TableAvailableAtUtc,
             Status = ReservationStatus.Confirmed,
-            Notes = request.Notes,
+            Notes = request.Notes?.Trim(),
             CreatedAtUtc = utcNow,
             UpdatedAtUtc = utcNow
         };
@@ -154,6 +161,8 @@ public class ReservationsController : ControllerBase
         _dbContext.Reservations.Add(reservation);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
 
         return CreatedAtAction(
             nameof(GetById),
