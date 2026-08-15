@@ -57,29 +57,29 @@ jobs:
           tags: tableflow-api:ci
 
   frontend:
-  name: Frontend Build
-  runs-on: ubuntu-latest
+    name: Frontend Build
+    runs-on: ubuntu-latest
 
-  defaults:
-    run:
-      working-directory: tableflow-web
+    defaults:
+      run:
+        working-directory: tableflow-web
 
-  steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22
-        cache: npm
-        cache-dependency-path: tableflow-web/package-lock.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tableflow-web/package-lock.json
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Run lint
-      run: npm run lint
+      - name: Run lint
+        run: npm run lint
 
-    - name: Build frontend
-      run: npm run build
+      - name: Build frontend
+        run: npm run build
