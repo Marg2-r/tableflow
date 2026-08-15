@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import "./App.css";
 
 import GeneralTimePicker from "./components/GeneralTimePicker";
@@ -63,6 +68,9 @@ function App() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  const tablesRequestController = useRef(null);
+  const overviewRequestController = useRef(null);
+
   const loadAvailableTables = useCallback(
     async (time) => {
       if (!time) {
@@ -70,8 +78,16 @@ function App() {
         return;
       }
 
+      tablesRequestController.current?.abort();
+
+      const controller = new AbortController();
+      tablesRequestController.current = controller;
+
       setIsTablesLoading(true);
       setError("");
+
+      // Старая карта больше не должна оставаться кликабельной.
+      setTables([]);
 
       try {
         const query = new URLSearchParams({
@@ -82,6 +98,9 @@ function App() {
 
         const response = await fetch(
           `${API_URL}/restaurants/${RESTAURANT_ID}/tables/available?${query}`,
+          {
+            signal: controller.signal,
+          },
         );
 
         if (!response.ok) {
@@ -92,17 +111,28 @@ function App() {
 
         setTables(data);
       } catch (requestError) {
+        if (requestError.name === "AbortError") {
+          return;
+        }
+
         console.error(requestError);
         setTables([]);
         setError(requestError.message);
       } finally {
-        setIsTablesLoading(false);
+        if (tablesRequestController.current === controller) {
+          setIsTablesLoading(false);
+        }
       }
     },
     [date, guests],
   );
 
   const loadGeneralAvailability = useCallback(async () => {
+    overviewRequestController.current?.abort();
+
+    const controller = new AbortController();
+    overviewRequestController.current = controller;
+    
     setIsOverviewLoading(true);
     setError("");
     setSuccessMessage("");
@@ -118,6 +148,9 @@ function App() {
 
       const response = await fetch(
         `${API_URL}/restaurants/${RESTAURANT_ID}/tables/available-times?${query}`,
+        {
+          signal: controller.signal,
+        }
       );
 
       if (!response.ok) {
@@ -145,15 +178,23 @@ function App() {
 
       setSearchTime(nearestTime);
       await loadAvailableTables(nearestTime);
-    } catch (requestError) {
+    }
+    catch (requestError) {
+      if (requestError.name === "AbortError") {
+        return;
+      }
+
       console.error(requestError);
 
       setGeneralTimes([]);
       setSearchTime("");
       setTables([]);
       setError(requestError.message);
-    } finally {
-      setIsOverviewLoading(false);
+    }
+    finally {
+        if (overviewRequestController.current === controller) {
+          setIsOverviewLoading(false);
+        }
     }
   }, [date, guests, loadAvailableTables]);
 
@@ -162,6 +203,12 @@ function App() {
       loadGeneralAvailability();
     }
   }, [activePage, loadGeneralAvailability]);
+
+  useEffect(() => {
+  setSelectedTable(null);
+  setSelectedTableTime("");
+  setIsReservationFormOpen(false);
+  }, [date, guests]);
 
   async function handleGeneralTimeSelect(time) {
     setSearchTime(time);

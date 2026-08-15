@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, RESTAURANT_ID } from "../config";
 
 function normalizeTime(time) {
@@ -36,8 +36,15 @@ function TableTimePicker({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const requestController = useRef(null);
+
   useEffect(() => {
     async function loadAvailableTimes() {
+      requestController.current?.abort();
+
+      const controller = new AbortController();
+      requestController.current = controller;
+
       setIsLoading(true);
       setError("");
       setAvailableTimes([]);
@@ -50,6 +57,9 @@ function TableTimePicker({
 
         const response = await fetch(
           `${API_URL}/restaurants/${RESTAURANT_ID}/tables/${table.id}/available-times?${query}`,
+          {
+            signal: controller.signal,
+          },
         );
 
         if (!response.ok) {
@@ -63,22 +73,32 @@ function TableTimePicker({
 
         setAvailableTimes(normalizedTimes);
 
-        if (
-          selectedTime &&
-          !normalizedTimes.includes(selectedTime)
-        ) {
-          onSelectTime("");
-        }
       } catch (requestError) {
+        if (requestError.name === "AbortError") {
+          return;
+        }
+
         console.error(requestError);
         setError(requestError.message);
       } finally {
-        setIsLoading(false);
+        if (requestController.current === controller) {
+          setIsLoading(false);
+        }
       }
     }
 
     loadAvailableTimes();
-  }, [table.id, date, guests]);
+
+    return () => {
+      requestController.current?.abort();
+    };
+  }, [
+    table.id,
+    date,
+    guests,
+    selectedTime,
+    onSelectTime,
+  ]);
 
   const groupedTimes = useMemo(() => {
     return {
