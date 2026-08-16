@@ -178,22 +178,29 @@ public class TablesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<RestaurantTable>> Create(
         int restaurantId,
-        RestaurantTable table,
+        CreateTableRequest request,
         CancellationToken cancellationToken)
     {
-        var restaurantExists =
-            await _dbContext.Restaurants.AnyAsync(
-                restaurant =>
-                    restaurant.Id == restaurantId,
+        var restaurantExists = await _dbContext.Restaurants
+            .AnyAsync(
+                restaurant => restaurant.Id == restaurantId,
                 cancellationToken);
 
         if (!restaurantExists)
         {
-            return NotFound("Restaurant does not exist.");
+            return NotFound("Restaurant was not found.");
         }
 
-        table.Id = 0;
-        table.RestaurantId = restaurantId;
+        var table = new RestaurantTable
+        {
+            RestaurantId = restaurantId,
+            Name = request.Name.Trim(),
+            Capacity = request.Capacity,
+            Zone = request.Zone.Trim(),
+            XPosition = request.XPosition,
+            YPosition = request.YPosition,
+            IsActive = request.IsActive
+        };
 
         _dbContext.Tables.Add(table);
 
@@ -213,27 +220,27 @@ public class TablesController : ControllerBase
     public async Task<ActionResult<RestaurantTable>> Update(
         int restaurantId,
         int id,
-        RestaurantTable updatedTable,
+        UpdateTableRequest request,
         CancellationToken cancellationToken)
     {
         var table = await _dbContext.Tables
-            .FirstOrDefaultAsync(
-                table =>
-                    table.Id == id &&
-                    table.RestaurantId == restaurantId,
-                cancellationToken);
+         .FirstOrDefaultAsync(
+             table =>
+                 table.Id == id &&
+                 table.RestaurantId == restaurantId,
+             cancellationToken);
 
         if (table is null)
         {
-            return NotFound();
+            return NotFound("Table was not found.");
         }
 
-        table.Name = updatedTable.Name;
-        table.Capacity = updatedTable.Capacity;
-        table.Zone = updatedTable.Zone;
-        table.XPosition = updatedTable.XPosition;
-        table.YPosition = updatedTable.YPosition;
-        table.IsActive = updatedTable.IsActive;
+        table.Name = request.Name.Trim();
+        table.Capacity = request.Capacity;
+        table.Zone = request.Zone.Trim();
+        table.XPosition = request.XPosition;
+        table.YPosition = request.YPosition;
+        table.IsActive = request.IsActive;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

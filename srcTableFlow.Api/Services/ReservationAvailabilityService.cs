@@ -147,6 +147,12 @@ public sealed class ReservationAvailabilityService
         int guests,
         CancellationToken cancellationToken = default)
     {
+        if (guests < 1)
+        {
+            throw new ReservationValidationException(
+                "Guest count must be at least 1.");
+        }
+
         var table = await _dbContext.Tables
             .AsNoTracking()
             .FirstOrDefaultAsync(
