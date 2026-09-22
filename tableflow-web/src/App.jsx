@@ -7,7 +7,7 @@ import {
 import "./App.css";
 
 import GeneralTimePicker from "./components/GeneralTimePicker";
-import ManagementSettings from "./components/ManagementSettings";
+import ManagementPage from "./components/ManagementPage";
 import ReservationForm from "./components/ReservationForm";
 import TableTimePicker from "./components/TableTimePicker";
 import { API_URL, RESTAURANT_ID } from "./config";
@@ -274,7 +274,7 @@ function App() {
       </nav>
 
       {activePage === "management" ? (
-        <ManagementSettings />
+        <ManagementPage  />
       ) : (
         <main className="page">
           <section className="hero">
