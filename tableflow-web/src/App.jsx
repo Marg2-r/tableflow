@@ -7,9 +7,11 @@ import {
 import "./App.css";
 
 import GeneralTimePicker from "./components/GeneralTimePicker";
+import ManagerLogin from "./components/ManagerLogin";
 import ManagementPage from "./components/ManagementPage";
 import ReservationForm from "./components/ReservationForm";
 import TableTimePicker from "./components/TableTimePicker";
+import { useAuth } from "./useAuth";
 import { API_URL, RESTAURANT_ID } from "./config";
 
 function formatLocalDate(date) {
@@ -46,6 +48,12 @@ async function readError(response) {
 
 function App() {
   const today = formatLocalDate(new Date());
+
+  const {
+    user,
+    isLoading: isAuthLoading,
+    logout,
+  } = useAuth();
 
   const [activePage, setActivePage] = useState("booking");
 
@@ -247,6 +255,11 @@ function App() {
     await loadGeneralAvailability();
   }
 
+  async function handleLogout() {
+    await logout();
+    setActivePage("booking");
+  }
+
   return (
     <>
       <nav className="app-navigation">
@@ -269,12 +282,30 @@ function App() {
             >
               Management
             </button>
+
+            {user && (
+              <button type="button" onClick={handleLogout}>
+                Log out
+              </button>
+            )}
           </div>
         </div>
       </nav>
 
       {activePage === "management" ? (
-        <ManagementPage  />
+        isAuthLoading ? (
+          <main className="page">
+            <div className="empty-state">
+              Checking manager session...
+            </div>
+          </main>
+        ) : user ? (
+          <ManagementPage restaurantId={user.restaurantId} />
+        ) : (
+          <ManagerLogin
+            onCancel={() => setActivePage("booking")}
+          />
+        )
       ) : (
         <main className="page">
           <section className="hero">

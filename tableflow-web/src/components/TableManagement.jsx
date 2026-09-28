@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { API_URL, RESTAURANT_ID } from "../config";
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../api";
+import { API_URL } from "../config";
 import TableFloorPlan from "./TableFloorPlan";
 
 async function readError(response) {
@@ -26,7 +27,7 @@ async function readError(response) {
   }
 }
 
-function TableManagement() {
+function TableManagement({ restaurantId }) {
   const [tables, setTables] = useState([]);
   const [formData, setFormData] = useState(null);
   const [editingTableId, setEditingTableId] = useState(null);
@@ -41,17 +42,13 @@ function TableManagement() {
   const [activeView, setActiveView] = useState("floor");
   const [isSavingLayout, setIsSavingLayout] = useState(false);
 
-  useEffect(() => {
-    loadTables();
-  }, []);
-
-  async function loadTables() {
+  const loadTables = useCallback(async () => {
     setIsLoading(true);
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/tables`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/tables`,
       );
 
       if (!response.ok) {
@@ -67,7 +64,11 @@ function TableManagement() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [restaurantId]);
+
+  useEffect(() => {
+    loadTables();
+  }, [loadTables]);
 
   function openCreateForm() {
     const tableIndex = tables.length;
@@ -134,11 +135,11 @@ function TableManagement() {
     const isEditing = editingTableId !== null;
 
     const url = isEditing
-      ? `${API_URL}/restaurants/${RESTAURANT_ID}/tables/${editingTableId}`
-      : `${API_URL}/restaurants/${RESTAURANT_ID}/tables`;
+      ? `${API_URL}/restaurants/${restaurantId}/tables/${editingTableId}`
+      : `${API_URL}/restaurants/${restaurantId}/tables`;
 
     try {
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: isEditing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
@@ -189,8 +190,8 @@ function TableManagement() {
     try {
         const results = await Promise.allSettled(
         changedTables.map(async (table) => {
-            const response = await fetch(
-            `${API_URL}/restaurants/${RESTAURANT_ID}/tables/${table.id}`,
+            const response = await apiFetch(
+            `${API_URL}/restaurants/${restaurantId}/tables/${table.id}`,
             {
                 method: "PUT",
                 headers: {
@@ -267,8 +268,8 @@ function TableManagement() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/tables/${table.id}`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/tables/${table.id}`,
         {
           method: "DELETE",
         },

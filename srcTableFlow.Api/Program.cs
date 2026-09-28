@@ -14,12 +14,23 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
+var allowedOrigins = builder.Configuration
+    .GetSection("Frontend:AllowedOrigins")
+    .Get<string[]>()
+    ?? [];
+
+if (allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "Frontend:AllowedOrigins is not configured.");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials(); 
@@ -61,9 +72,11 @@ builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.Name = "tableflow.manager";
     options.Cookie.HttpOnly = true;
-    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy =
-        CookieSecurePolicy.SameAsRequest;
+        builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
 
     options.ExpireTimeSpan = TimeSpan.FromHours(8);
     options.SlidingExpiration = true;
@@ -102,6 +115,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddSingleton<
     IAuthorizationHandler,
     RestaurantAccessHandler>();
+
 builder.Services
     .AddScoped<ReservationAvailabilityService>();
 

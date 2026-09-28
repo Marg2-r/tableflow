@@ -18,19 +18,21 @@ const sections = [
   },
 ];
 
-function ManagementPage() {
+function ManagementPage({ restaurantId }) {
   const [activeSection, setActiveSection] = useState("settings");
 
   function renderActiveSection() {
     if (activeSection === "tables") {
-      return <TableManagement />;
+      return <TableManagement restaurantId={restaurantId} />;
     }
 
     if (activeSection === "reservations") {
-      return <ReservationManagement />;
+      return (
+        <ReservationManagement restaurantId={restaurantId} />
+      );
     }
 
-    return <ManagementSettings />;
+    return <ManagementSettings restaurantId={restaurantId} />;
   }
 
   return (

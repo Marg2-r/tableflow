@@ -384,6 +384,33 @@ h2 {
   opacity: 0.6;
 }
 
+.manager-login-card {
+  width: min(100%, 620px);
+}
+
+.manager-login-form {
+  grid-template-columns: 1fr;
+}
+
+.manager-login-form .manager-remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 400;
+}
+
+.manager-login-form .manager-remember input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.manager-login-form .manager-remember span {
+  min-height: 0;
+  color: #36332f;
+  font-size: 14px;
+}
+
 .success-message {
   margin: 20px 0 0;
   color: #26734d;

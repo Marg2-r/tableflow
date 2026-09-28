@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { API_URL, RESTAURANT_ID } from "../config";
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../api";
+import { API_URL } from "../config";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -96,7 +97,7 @@ function ReservationStatus({ status }) {
   );
 }
 
-function ReservationManagement() {
+function ReservationManagement({ restaurantId }) {
   const [reservations, setReservations] = useState([]);
   const [selectedReservation, setSelectedReservation] =
     useState(null);
@@ -111,17 +112,13 @@ function ReservationManagement() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  useEffect(() => {
-    loadReservations();
-  }, []);
-
-  async function loadReservations() {
+  const loadReservations = useCallback(async () => {
     setIsLoading(true);
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/reservations`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/reservations`,
       );
 
       if (!response.ok) {
@@ -137,7 +134,11 @@ function ReservationManagement() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [restaurantId]);
+
+  useEffect(() => {
+    loadReservations();
+  }, [loadReservations]);
 
   async function handleCancel(reservation) {
     const confirmed = window.confirm(
@@ -153,8 +154,8 @@ function ReservationManagement() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/reservations/${reservation.id}/cancel`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/reservations/${reservation.id}/cancel`,
         {
           method: "PATCH",
         },
