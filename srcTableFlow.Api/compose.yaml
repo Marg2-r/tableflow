@@ -31,6 +31,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=tableflow;Username=postgres;Password=${POSTGRES_PASSWORD}
 
+      BootstrapAdmin__Email: ${BOOTSTRAP_ADMIN_EMAIL}
+      BootstrapAdmin__Password: ${BOOTSTRAP_ADMIN_PASSWORD}
+      BootstrapAdmin__RestaurantId: ${BOOTSTRAP_ADMIN_RESTAURANT_ID}
+
     ports:
       - "8080:8080"
 

@@ -1,13 +1,16 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TableFlow.Api.Contracts;
 using TableFlow.Api.Data;
 using TableFlow.Api.Models;
+using TableFlow.Api.Security;
 using TableFlow.Api.Services;
 
 namespace TableFlow.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = TableFlowPolicies.ManagerRestaurant)]
 [Route("restaurants/{restaurantId:int}/tables")]
 public class TablesController : ControllerBase
 {
@@ -60,6 +63,7 @@ public class TablesController : ControllerBase
         return Ok(table);
     }
 
+    [AllowAnonymous]
     [HttpGet("available")]
     public async Task<ActionResult<List<RestaurantTable>>>
         GetAvailable(
@@ -92,6 +96,7 @@ public class TablesController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
     [HttpGet("available-times")]
     public async Task<ActionResult<AvailableTimesOverviewResponse>>
     GetAvailableTimesOverview(
@@ -137,7 +142,7 @@ public class TablesController : ControllerBase
         }
     }
 
-
+    [AllowAnonymous]
     [HttpGet("{tableId:int}/available-times")]
     public async Task<ActionResult<AvailableTimesResponse>>
         GetAvailableTimes(

@@ -5,10 +5,13 @@ using TableFlow.Api.Data;
 using TableFlow.Api.Enums;
 using TableFlow.Api.Models;
 using TableFlow.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using TableFlow.Api.Security;
 
 namespace TableFlow.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = TableFlowPolicies.ManagerRestaurant)]
 [Route("restaurants/{restaurantId:int}/reservations")]
 public class ReservationsController : ControllerBase
 {
@@ -67,6 +70,7 @@ public class ReservationsController : ControllerBase
         return Ok(ToResponse(reservation));
     }
 
+    [AllowAnonymous]
     [HttpPost]
     public async Task<ActionResult<ReservationResponse>> Create(
         int restaurantId,
