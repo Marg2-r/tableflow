@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { API_URL, RESTAURANT_ID } from "../config";
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../api";
+import { API_URL } from "../config";
 
-function ManagementSettings() {
+function ManagementSettings({ restaurantId }) {
   const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -9,17 +10,13 @@ function ManagementSettings() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  async function loadSettings() {
+  const loadSettings = useCallback(async () => {
     setIsLoading(true);
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/management/settings`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/management/settings`,
       );
 
       if (!response.ok) {
@@ -39,7 +36,11 @@ function ManagementSettings() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [restaurantId]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -60,8 +61,8 @@ function ManagementSettings() {
     setSuccessMessage("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/management/settings`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/management/settings`,
         {
           method: "PUT",
           headers: {

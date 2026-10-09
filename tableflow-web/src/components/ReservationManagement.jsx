@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { API_URL, RESTAURANT_ID } from "../config";
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../api";
+import { API_URL } from "../config";
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -76,6 +77,62 @@ function getStatusLabel(status) {
   return labels[normalizedStatus];
 }
 
+const reservationStatusValues = {
+  cancelled: 2,
+  seated: 3,
+  noShow: 4,
+  completed: 5,
+};
+
+function getStatusActions(reservation) {
+  const status = normalizeStatus(reservation.status);
+
+  if (status === "confirmed") {
+    return [
+      {
+        status: reservationStatusValues.seated,
+        label: "Seat",
+        progressLabel: "Seating",
+        successMessage: "was marked as seated",
+        kind: "primary",
+      },
+      {
+        status: reservationStatusValues.noShow,
+        label: "No show",
+        progressLabel: "Updating",
+        successMessage: "was marked as no-show",
+        kind: "warning",
+        confirmMessage:
+          `Mark reservation #${reservation.id} as no-show?`,
+      },
+      {
+        status: reservationStatusValues.cancelled,
+        label: "Cancel",
+        progressLabel: "Cancelling",
+        successMessage: "was cancelled",
+        kind: "danger",
+        confirmMessage:
+          `Cancel reservation #${reservation.id} for ` +
+          `${reservation.customerName}?`,
+      },
+    ];
+  }
+
+  if (status === "seated") {
+    return [
+      {
+        status: reservationStatusValues.completed,
+        label: "Complete",
+        progressLabel: "Completing",
+        successMessage: "was completed",
+        kind: "primary",
+      },
+    ];
+  }
+
+  return [];
+}
+
 function getLocalDateKey(value) {
   const date = new Date(value);
 
@@ -96,7 +153,7 @@ function ReservationStatus({ status }) {
   );
 }
 
-function ReservationManagement() {
+function ReservationManagement({ restaurantId }) {
   const [reservations, setReservations] = useState([]);
   const [selectedReservation, setSelectedReservation] =
     useState(null);
@@ -106,22 +163,18 @@ function ReservationManagement() {
   const [dateFilter, setDateFilter] = useState("");
 
   const [isLoading, setIsLoading] = useState(true);
-  const [cancellingId, setCancellingId] = useState(null);
+  const [updatingStatus, setUpdatingStatus] = useState(null);
 
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  useEffect(() => {
-    loadReservations();
-  }, []);
-
-  async function loadReservations() {
+  const loadReservations = useCallback(async () => {
     setIsLoading(true);
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/reservations`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/reservations`,
       );
 
       if (!response.ok) {
@@ -137,26 +190,38 @@ function ReservationManagement() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [restaurantId]);
 
-  async function handleCancel(reservation) {
-    const confirmed = window.confirm(
-      `Cancel reservation #${reservation.id} for ${reservation.customerName}?`,
-    );
+  useEffect(() => {
+    loadReservations();
+  }, [loadReservations]);
 
-    if (!confirmed) {
+  async function handleStatusChange(reservation, action) {
+    if (
+      action.confirmMessage &&
+      !window.confirm(action.confirmMessage)
+    ) {
       return;
     }
 
-    setCancellingId(reservation.id);
+    setUpdatingStatus({
+      reservationId: reservation.id,
+      status: action.status,
+    });
     setError("");
     setSuccessMessage("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/restaurants/${RESTAURANT_ID}/reservations/${reservation.id}/cancel`,
+      const response = await apiFetch(
+        `${API_URL}/restaurants/${restaurantId}/reservations/${reservation.id}/status`,
         {
           method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: action.status,
+          }),
         },
       );
 
@@ -181,13 +246,14 @@ function ReservationManagement() {
       );
 
       setSuccessMessage(
-        `Reservation #${updatedReservation.id} was cancelled.`,
+        `Reservation #${updatedReservation.id} ` +
+        `${action.successMessage}.`,
       );
     } catch (requestError) {
       console.error(requestError);
       setError(requestError.message);
     } finally {
-      setCancellingId(null);
+      setUpdatingStatus(null);
     }
   }
 
@@ -346,9 +412,7 @@ function ReservationManagement() {
                   reservation.startsAtUtc,
                 );
 
-                const canCancel =
-                  normalizeStatus(reservation.status) ===
-                  "confirmed";
+                const actions = getStatusActions(reservation);
 
                 return (
                   <tr key={reservation.id}>
@@ -389,22 +453,32 @@ function ReservationManagement() {
                           Details
                         </button>
 
-                        {canCancel && (
+                        {actions.map((action) => (
                           <button
-                            className="danger-text-button"
-                            type="button"
-                            disabled={
-                              cancellingId === reservation.id
+                            key={action.status}
+                            className={
+                              action.kind === "danger"
+                                ? "danger-text-button"
+                                : action.kind === "warning"
+                                  ? "warning-text-button"
+                                  : undefined
                             }
+                            type="button"
+                            disabled={updatingStatus !== null}
                             onClick={() =>
-                              handleCancel(reservation)
+                              handleStatusChange(
+                                reservation,
+                                action,
+                              )
                             }
                           >
-                            {cancellingId === reservation.id
-                              ? "Cancelling..."
-                              : "Cancel"}
+                            {updatingStatus?.reservationId ===
+                              reservation.id &&
+                            updatingStatus.status === action.status
+                              ? `${action.progressLabel}...`
+                              : action.label}
                           </button>
-                        )}
+                        ))}
                       </div>
                     </td>
                   </tr>
@@ -530,22 +604,27 @@ function ReservationManagement() {
                 Close
               </button>
 
-              {normalizeStatus(selectedReservation.status) ===
-                "confirmed" && (
+              {getStatusActions(selectedReservation).map(
+                (action) => (
                 <button
-                  className="danger-button"
+                  key={action.status}
+                  className={`${action.kind}-button`}
                   type="button"
-                  disabled={
-                    cancellingId === selectedReservation.id
-                  }
+                  disabled={updatingStatus !== null}
                   onClick={() =>
-                    handleCancel(selectedReservation)
+                    handleStatusChange(
+                      selectedReservation,
+                      action,
+                    )
                   }
                 >
-                  {cancellingId === selectedReservation.id
-                    ? "Cancelling..."
-                    : "Cancel reservation"}
+                  {updatingStatus?.reservationId ===
+                    selectedReservation.id &&
+                  updatingStatus.status === action.status
+                    ? `${action.progressLabel}...`
+                    : action.label}
                 </button>
+                ),
               )}
             </div>
           </section>

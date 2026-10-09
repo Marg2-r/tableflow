@@ -1,12 +1,15 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TableFlow.Api.Contracts;
 using TableFlow.Api.Data;
 using TableFlow.Api.Models;
+using TableFlow.Api.Security;
 
 namespace TableFlow.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = TableFlowPolicies.ManagerRestaurant)]
 [Route("restaurants/{restaurantId:int}/management/settings")]
 public class ManagementSettingsController : ControllerBase
 {

@@ -384,6 +384,33 @@ h2 {
   opacity: 0.6;
 }
 
+.manager-login-card {
+  width: min(100%, 620px);
+}
+
+.manager-login-form {
+  grid-template-columns: 1fr;
+}
+
+.manager-login-form .manager-remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 400;
+}
+
+.manager-login-form .manager-remember input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.manager-login-form .manager-remember span {
+  min-height: 0;
+  color: #36332f;
+  font-size: 14px;
+}
+
 .success-message {
   margin: 20px 0 0;
   color: #26734d;
@@ -1360,6 +1387,7 @@ h2 {
 
 .reservation-row-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -1376,6 +1404,11 @@ h2 {
 .reservation-row-actions .danger-text-button {
   border-color: transparent;
   color: #b42318;
+}
+
+.reservation-row-actions .warning-text-button {
+  border-color: transparent;
+  color: #9a5b00;
 }
 
 .reservation-row-actions button:disabled {
@@ -1454,6 +1487,16 @@ h2 {
 
 .reservation-details-actions .danger-button {
   background: #b42318;
+  color: #ffffff;
+}
+
+.reservation-details-actions .primary-button {
+  background: #24231f;
+  color: #ffffff;
+}
+
+.reservation-details-actions .warning-button {
+  background: #9a5b00;
   color: #ffffff;
 }
 

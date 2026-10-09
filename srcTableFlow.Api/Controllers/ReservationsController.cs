@@ -5,10 +5,13 @@ using TableFlow.Api.Data;
 using TableFlow.Api.Enums;
 using TableFlow.Api.Models;
 using TableFlow.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using TableFlow.Api.Security;
 
 namespace TableFlow.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = TableFlowPolicies.ManagerRestaurant)]
 [Route("restaurants/{restaurantId:int}/reservations")]
 public class ReservationsController : ControllerBase
 {
@@ -67,6 +70,7 @@ public class ReservationsController : ControllerBase
         return Ok(ToResponse(reservation));
     }
 
+    [AllowAnonymous]
     [HttpPost]
     public async Task<ActionResult<ReservationResponse>> Create(
         int restaurantId,
@@ -193,24 +197,93 @@ public class ReservationsController : ControllerBase
             return NotFound();
         }
 
-        if (reservation.Status ==
-            ReservationStatus.Cancelled)
+        if (!ReservationStatusTransitions.CanTransition(
+                reservation.Status,
+                ReservationStatus.Cancelled))
         {
-            return BadRequest(
-                "Reservation is already cancelled.");
+            return Conflict(
+                CreateInvalidTransitionMessage(
+                    reservation.Status,
+                    ReservationStatus.Cancelled));
         }
 
         var utcNow = DateTime.UtcNow;
 
-        reservation.Status =
-            ReservationStatus.Cancelled;
-
-        reservation.CancelledAtUtc = utcNow;
-        reservation.UpdatedAtUtc = utcNow;
+        ApplyStatus(
+            reservation,
+            ReservationStatus.Cancelled,
+            utcNow);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(ToResponse(reservation));
+    }
+
+    [HttpPatch("{id:int}/status")]
+    public async Task<ActionResult<ReservationResponse>> UpdateStatus(
+        int restaurantId,
+        int id,
+        UpdateReservationStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(request.Status))
+        {
+            return BadRequest("Unknown reservation status.");
+        }
+
+        var reservation = await _dbContext.Reservations
+            .Include(reservation => reservation.Table)
+            .FirstOrDefaultAsync(
+                reservation =>
+                    reservation.Id == id &&
+                    reservation.RestaurantId == restaurantId,
+                cancellationToken);
+
+        if (reservation is null)
+        {
+            return NotFound();
+        }
+
+        if (!ReservationStatusTransitions.CanTransition(
+                reservation.Status,
+                request.Status))
+        {
+            return Conflict(
+                CreateInvalidTransitionMessage(
+                    reservation.Status,
+                    request.Status));
+        }
+
+        ApplyStatus(
+            reservation,
+            request.Status,
+            DateTime.UtcNow);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(ToResponse(reservation));
+    }
+
+    private static void ApplyStatus(
+        Reservation reservation,
+        ReservationStatus nextStatus,
+        DateTime utcNow)
+    {
+        reservation.Status = nextStatus;
+        reservation.UpdatedAtUtc = utcNow;
+
+        if (nextStatus == ReservationStatus.Cancelled)
+        {
+            reservation.CancelledAtUtc = utcNow;
+        }
+    }
+
+    private static string CreateInvalidTransitionMessage(
+        ReservationStatus currentStatus,
+        ReservationStatus nextStatus)
+    {
+        return $"Reservation cannot transition from " +
+               $"{currentStatus} to {nextStatus}.";
     }
 
     private static ReservationResponse ToResponse(

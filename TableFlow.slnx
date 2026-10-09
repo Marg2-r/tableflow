@@ -2,4 +2,7 @@
   <Folder Name="/srcTableFlow.Api/">
     <Project Path="srcTableFlow.Api/TableFlow.Api.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TableFlow.Api.Tests/TableFlow.Api.Tests.csproj" />
+  </Folder>
 </Solution>

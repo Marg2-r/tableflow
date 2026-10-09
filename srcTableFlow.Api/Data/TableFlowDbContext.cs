@@ -1,9 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using TableFlow.Api.Models;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
 namespace TableFlow.Api.Data;
 
-public class TableFlowDbContext : DbContext
+public class TableFlowDbContext : IdentityDbContext<ApplicationUser>
 {
     public TableFlowDbContext(
         DbContextOptions<TableFlowDbContext> options)
@@ -33,6 +34,7 @@ public class TableFlowDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        ConfigureApplicationUser(modelBuilder);
         ConfigureRestaurant(modelBuilder);
         ConfigureRestaurantSettings(modelBuilder);
         ConfigureOpeningHours(modelBuilder);
@@ -40,6 +42,20 @@ public class TableFlowDbContext : DbContext
         ConfigureReservation(modelBuilder);
         ConfigureTableBlock(modelBuilder);
         AddInitialData(modelBuilder);
+    }
+
+    private static void ConfigureApplicationUser(
+    ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ApplicationUser>(entity =>
+        {
+            entity.HasIndex(user => user.RestaurantId);
+
+            entity.HasOne<Restaurant>()
+                .WithMany()
+                .HasForeignKey(user => user.RestaurantId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureRestaurant(ModelBuilder modelBuilder)
